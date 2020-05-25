@@ -1,0 +1,526 @@
+---
+title: "Regularization in R"
+output:
+  html_document:
+    df_print: paged
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(DataExplorer)
+library(fastDummies)
+library(caTools)
+library(caret)
+library(glmnet)
+library(mlbench)
+library(psych)
+```
+## Fish Weight Prediction
+Follow the result of Fish Weight Prediction using Linear Regression in the previous lab, now this work will apply cross validation and 3 types of regularization: Ridge, Lasso, Elastic Net. Let see if the result is improved or not when doing cross validation and regularization.
+
+<h3>1. Data Exploration</h3>
+First input and see the structure of the dataset:
+```{r}
+data_fish <-  read.csv("Fish.csv")
+names(data_fish)[1] = "Species"
+str(data_fish)
+```
+To do the linear regression in this dataset, the Species feature need to convert to dummy variables. Structure after dummy:
+```{r}
+data_fish = dummy_cols(data_fish)
+data_fish = data_fish[,-1]
+str(data_fish)
+```
+According to Linear Regression lab, this dataset doesn't have misssing values, let move on to sampling.
+<h3>2. Stratified sampling</h3>
+The sampling will divide the dataset so that 70% instanses of the dataset will go for training and 30% will go for validating
+```{r, echo=FALSE}
+set.seed(123)
+split <- sample.split(data_fish$Weight, SplitRatio = 0.7)
+training_set = subset(data_fish, split == TRUE)
+test_set = subset(data_fish, split == FALSE)
+```
+```{r}
+str(training_set)
+str(test_set)
+```
+<h3>3. Cross validation</h3>
+As the training set is only 111 observes, the cross validation will do only 5 folds.
+```{r}
+custom <- trainControl(method = "repeatedcv",
+                       number = 5,
+                       repeats = 5)
+options(warn=-1)
+# Find the robust model
+set.seed(1234)
+lm_cv <- train(Weight ~ .,
+            training_set,
+            method = 'lm',
+            trControl = custom)
+```
+After repeated 5 times, the robust model is:
+```{r}
+summary(lm_cv)
+```
+<h3>3. Ridge Regression</h3>
+With Ridge Regression, the model parameter will slowly go to 0. Continue using the train control above, put alpha = 0 for Ridge Regression, and 20 lamda values varies from 0.001 to 2.
+```{r}
+lm_ridge <- train(Weight ~.,
+               training_set,
+               method = 'glmnet',
+               tuneGrid = expand.grid(alpha = 0,
+                                      lambda = seq(0.001, 2, length = 20)),
+               trControl = custom)
+```
+Summary after doing Ridge Regression:
+```{r}
+print(lm_ridge)
+```
+Plot the result of ridge regression:
+```{r}
+plot(lm_ridge)
+plot(lm_ridge$finalModel, xvar = "lambda", label = T)
+```
+</br>RMSE is unchanged when changing the lamda values in Ridge Regression.
+<h3>4. Lasso Regression</h3>
+With Lasso Regression, the model parameter will straight go to 0. Continue using the train control above, put alpha = 1 for Lasso Regression, and 20 lamda values varies from 0.001 to 2.
+```{r}
+lm_lasso <- train(Weight ~.,
+               training_set,
+               method = 'glmnet',
+               tuneGrid = expand.grid(alpha = 1,
+                                      lambda = seq(0.001, 2, length = 20)),
+               trControl = custom)
+```
+Summary after doing Lasso Regression:
+```{r}
+print(lm_lasso)
+```
+Plot the result of Lasso regression:
+```{r}
+plot(lm_lasso)
+plot(lm_lasso$finalModel, xvar = "lambda", label = T)
+```
+</br>With Lasso Regression, the RMSE is keep going down till lamda value is 1.26, before going up again. The selected model has lambda = 1.158316
+<h3>5. Elastic Net Regression</h3>
+Elastic Net Regression, is mixed between Ridge and Lasso Regression. Continue using the train control above, alpha = 1 is now also varies between 0 to 1, and 20 lamda values varies from 0.001 to 2.
+```{r}
+lm_en <- train(Weight ~.,
+            training_set,
+            method = 'glmnet',
+            tuneGrid = expand.grid(alpha = seq (0, 1, length = 20) ,
+                                   lambda = seq(0.001, 2, length = 20)),
+            trControl = custom)
+```
+Summary after doing Entropy Net Regression:
+```{r}
+print(lm_en)
+```
+Plot the result of Entropy Net Regression:
+```{r}
+plot(lm_en)
+plot(lm_en$finalModel, xvar = "lambda", label = T)
+```
+</br>The selected model has alpha = 1 which is Lasso Regression but lambda = 0.8426842 different with the selected model when doing Lasso Regression.
+<h3>6. Prediction Result</h3>
+<b><h4>6.1 Previuous Result</h4></b>
+First look at the previous result in Linear Regression lab, with basic Linear Regression only:
+<table class="table table-bordered" style="margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RMSE
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RSS
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center;" colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+R&#178;
+</div>
+</th>
+</tr>
+<tr>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+85.85008
+</td>
+<td style="text-align:right;">
+104.2211
+</td>
+<td style="text-align:right;">
+818096.2
+</td>
+<td style="text-align:right;">
+521377.6
+</td>
+<td style="text-align:right;">
+0.9448807
+</td>
+<td style="text-align:right;">
+0.9010514
+</td>
+</tr>
+</tbody>
+</table>
+<b><h4>6.2 With Cross Validation</h4></b>
+```{r}
+pred_cv_test <- predict(lm_cv, test_set)
+combine_table_cv <- cbind(pred_cv_test,test_set$Weight)
+colnames(combine_table_cv) <- c("Prediction Weight", "Real Weight")
+combine_table_cv
+```
+```{r, echo=FALSE}
+pred_cv_train = predict(lm_cv, training_set)
+
+rmse_train_cv <- sqrt(mean((training_set$Weight-pred_cv_train)^2))
+rmse_test_cv <- sqrt(mean((test_set$Weight-pred_cv_test)^2))
+
+rss_train_cv <- sum((training_set$Weight-pred_cv_train)^2)
+rss_test_cv <- sum((test_set$Weight-pred_cv_test)^2)
+
+tss_train <- sum((training_set$Weight - mean(training_set$Weight)) ^ 2)
+tss_test <- sum((test_set$Weight - mean(test_set$Weight)) ^ 2)
+
+r_square_train_cv <- 1-(rss_train_cv/tss_train)
+r_square_test_cv <- 1-(rss_test_cv/tss_test)
+```
+<table class="table table-bordered" style="margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RMSE
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RSS
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center;" colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+R&#178;
+</div>
+</th>
+</tr>
+<tr>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+85.85008
+</td>
+<td style="text-align:right;">
+104.2211
+</td>
+<td style="text-align:right;">
+818096.2
+</td>
+<td style="text-align:right;">
+521377.6
+</td>
+<td style="text-align:right;">
+0.9448807
+</td>
+<td style="text-align:right;">
+0.9010514
+</td>
+</tr>
+</tbody>
+</table>
+The result is same as basic Linear Regression.
+<b><h4>6.3 Using Ridge Regression</h4></b>
+```{r}
+pred_ridge_test <- predict(lm_ridge, test_set)
+combine_table_ridge <- cbind(pred_ridge_test,test_set$Weight)
+colnames(combine_table_ridge) <- c("Prediction Weight", "Real Weight")
+combine_table_ridge
+```
+```{r, echo=FALSE}
+pred_ridge_train = predict(lm_ridge, training_set)
+
+rmse_train_ridge <- sqrt(mean((training_set$Weight-pred_ridge_train)^2))
+rmse_test_ridge <- sqrt(mean((test_set$Weight-pred_ridge_test)^2))
+
+rss_train_ridge <- sum((training_set$Weight-pred_ridge_train)^2)
+rss_test_ridge <- sum((test_set$Weight-pred_ridge_test)^2)
+
+r_square_train_ridge <- 1-(rss_train_ridge/tss_train)
+r_square_test_ridge <- 1-(rss_test_ridge/tss_test)
+```
+<table class="table table-bordered" style="margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RMSE
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RSS
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center;" colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+R&#178;
+</div>
+</th>
+</tr>
+<tr>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+92.16549
+</td>
+<td style="text-align:right;">
+111.3147
+</td>
+<td style="text-align:right;">
+942886.9
+</td>
+<td style="text-align:right;">
+594766.6
+</td>
+<td style="text-align:right;">
+0.936473
+</td>
+<td style="text-align:right;">
+0.8871234
+</td>
+</tr>
+</tbody>
+</table>
+The result have bigger RSME value on both training and test set than the basic Linear Regression. R&#178; on test set reduce a little bit, while quite a lot on training set.
+<b><h4>6.4 Using Lasso Regression</h4></b>
+```{r}
+pred_lasso_test <- predict(lm_lasso, test_set)
+combine_table_lasso <- cbind(pred_lasso_test,test_set$Weight)
+colnames(combine_table_lasso) <- c("Prediction Weight", "Real Weight")
+combine_table_lasso
+```
+```{r, echo=FALSE}
+pred_lasso_train = predict(lm_lasso, training_set)
+
+rmse_train_lasso <- sqrt(mean((training_set$Weight-pred_lasso_train)^2))
+rmse_test_lasso <- sqrt(mean((test_set$Weight-pred_lasso_test)^2))
+
+rss_train_lasso <- sum((training_set$Weight-pred_lasso_train)^2)
+rss_test_lasso <- sum((test_set$Weight-pred_lasso_test)^2)
+
+r_square_train_lasso <- 1-(rss_train_lasso/tss_train)
+r_square_test_lasso <- 1-(rss_test_lasso/tss_test)
+```
+<table class="table table-bordered" style="margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RMSE
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RSS
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center;" colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+R&#178;
+</div>
+</th>
+</tr>
+<tr>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+87.14946
+</td>
+<td style="text-align:right;">
+106.6483
+</td>
+<td style="text-align:right;">
+843048.2
+</td>
+<td style="text-align:right;">
+545945
+</td>
+<td style="text-align:right;">
+0.9431996
+</td>
+<td style="text-align:right;">
+0.8963889
+</td>
+</tr>
+</tbody>
+</table>
+The result is a bit better than using Ridge Regression, but still under the result of basic Linear Regression
+<b><h4>6.5 Using Elastic Net Regression</h4></b>
+```{r}
+pred_en_test <- predict(lm_en, test_set)
+combine_table_en <- cbind(pred_en_test,test_set$Weight)
+colnames(combine_table_en) <- c("Prediction Weight", "Real Weight")
+combine_table_en
+```
+```{r, echo=FALSE}
+pred_en_train = predict(lm_en, training_set)
+
+rmse_train_en <- sqrt(mean((training_set$Weight-pred_en_train)^2))
+rmse_test_en <- sqrt(mean((test_set$Weight-pred_en_test)^2))
+
+rss_train_en <- sum((training_set$Weight-pred_en_train)^2)
+rss_test_en <- sum((test_set$Weight-pred_en_test)^2)
+
+r_square_train_en <- 1-(rss_train_en/tss_train)
+r_square_test_en <- 1-(rss_test_en/tss_test)
+```
+<table class="table table-bordered" style="margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RMSE
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+RSS
+</div>
+</th>
+<th style="border-bottom:hidden; padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center;" colspan="2">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+R&#178;
+</div>
+</th>
+</tr>
+<tr>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+<th style="text-align:right;">
+On training set
+</th>
+<th style="text-align:right;">
+On test set
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+87.06498
+</td>
+<td style="text-align:right;">
+106.6033
+</td>
+<td style="text-align:right;">
+841414.6
+</td>
+<td style="text-align:right;">
+545484.8
+</td>
+<td style="text-align:right;">
+0.9433097
+</td>
+<td style="text-align:right;">
+0.8964762
+</td>
+</tr>
+</tbody>
+</table>
+The result is almost similar as Lasso Regression.
+<h3>7. Conclusion</h3>
+The result after doing cross validation, 3 types of Regularization: Ridge, Lasso, Elastic Net is still behind the basic Linear Regression. Due to the limited of number of observes this result may not reflect all the situation, however the generalizability of them will be better than the basic one.
